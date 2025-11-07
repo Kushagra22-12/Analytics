@@ -29,9 +29,17 @@ if deficit_column in df.columns:
     deficit_data = df[[customer_column, product_column, deficit_column]].dropna()
     merged_data = pd.merge(merged_data, deficit_data, on=[customer_column, product_column], how='left')
 
-# ✅ Fix regex for extracting month-year from column names
-merged_data['Date'] = merged_data['Date'].str.extract(r'(Oct|Nov|Dec|Jan|Feb)\\'?\\d{2}')
+# ✅ Extract month-year and convert to datetime
+merged_data['Date'] = merged_data['Date'].str.extract(r"(Oct|Nov|Dec|Jan|Feb)'?\\d{2}")
 merged_data.dropna(subset=['Date'], inplace=True)
+
+# Map month abbreviations to numbers
+month_map = {'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2}
+
+# Convert to datetime (assuming year 2025 for Oct-Dec, and 2026 for Jan-Feb)
+merged_data['Year'] = merged_data['Date'].apply(lambda x: 2025 if x in ['Oct', 'Nov', 'Dec'] else 2026)
+merged_data['Month'] = merged_data['Date'].map(month_map)
+merged_data['Date'] = pd.to_datetime(merged_data[['Year', 'Month']].assign(DAY=1))
 
 # Convert numeric columns
 merged_data['Production'] = pd.to_numeric(merged_data['Production'], errors='coerce')
@@ -60,14 +68,14 @@ def main():
     total_sales = filtered_data['Sales'].sum()
     total_deficit = filtered_data['Dificit Qty.'].sum()
 
-    st.subheader(f"📅 Summary for {selected_date}")
+    st.subheader(f"📅 Summary for {selected_date.strftime('%B %Y')}")
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Production", f"{total_production:.2f}")
     col2.metric("Total Sales", f"{total_sales:.2f}")
     col3.metric("Total Deficit", f"{total_deficit:.2f}")
 
     # Daily Trend Chart
-    st.subheader("📈 Daily Production vs Sales Trend")
+    st.subheader("📈 Monthly Production vs Sales Trend")
     daily_summary = merged_data.groupby('Date')[['Production', 'Sales']].sum().reset_index()
     fig_daily = px.line(daily_summary, x='Date', y=['Production', 'Sales'], markers=True)
     st.plotly_chart(fig_daily)
@@ -90,7 +98,7 @@ def main():
     next_date = date_list[date_index + 1] if date_index < len(date_list) - 1 else None
 
     if prev_date:
-        st.subheader(f"⬅️ Comparison with Previous Month: {prev_date}")
+        st.subheader(f"⬅️ Comparison with Previous Month: {prev_date.strftime('%B %Y')}")
         prev_data = merged_data[merged_data['Date'] == prev_date]
         comparison_prev = pd.merge(filtered_data, prev_data, on=[customer_column, product_column], suffixes=('_current', '_prev'))
         comparison_prev['Production_Diff'] = comparison_prev['Production_current'] - comparison_prev['Production_prev']
@@ -98,7 +106,7 @@ def main():
         st.dataframe(comparison_prev[[customer_column, product_column, 'Production_Diff', 'Sales_Diff']])
 
     if next_date:
-        st.subheader(f"➡️ Comparison with Next Month: {next_date}")
+        st.subheader(f"➡️ Comparison with Next Month: {next_date.strftime('%B %Y')}")
         next_data = merged_data[merged_data['Date'] == next_date]
         comparison_next = pd.merge(filtered_data, next_data, on=[customer_column, product_column], suffixes=('_current', '_next'))
         comparison_next['Production_Diff'] = comparison_next['Production_next'] - comparison_next['Production_current']
