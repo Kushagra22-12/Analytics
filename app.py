@@ -29,8 +29,8 @@ if deficit_column in df.columns:
     deficit_data = df[[customer_column, product_column, deficit_column]].dropna()
     merged_data = pd.merge(merged_data, deficit_data, on=[customer_column, product_column], how='left')
 
-# Clean date column
-merged_data['Date'] = merged_data['Date'].str.extract(r'(Oct|Nov|Dec|Jan|Feb)\\'?\\d{2}').dropna()
+# ✅ Fix regex for extracting month-year from column names
+merged_data['Date'] = merged_data['Date'].str.extract(r'(Oct|Nov|Dec|Jan|Feb)\\'?\\d{2}')
 merged_data.dropna(subset=['Date'], inplace=True)
 
 # Convert numeric columns
