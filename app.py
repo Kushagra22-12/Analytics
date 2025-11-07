@@ -2,53 +2,55 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-# Load the Excel file
-file_path = "Rolling Plan Nov-25 to Feb-26 (2) (1).xlsx"
-df = pd.read_excel(file_path, sheet_name=0, header=2, engine='openpyxl')
+st.title("📊 Rolling Plan Analytics Dashboard")
 
-# Drop rows with all NaN values
-df.dropna(how='all', inplace=True)
+# ✅ File Upload
+uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 
-# Extract relevant columns
-date_columns = [col for col in df.columns if isinstance(col, str) and any(month in col for month in ['Oct', 'Nov', 'Dec', 'Jan', 'Feb'])]
-production_columns = [col for col in date_columns if 'Production' in col]
-sales_columns = [col for col in date_columns if 'Sales' in col]
-customer_column = 'Customer'
-product_column = 'Product'
-deficit_column = 'Dificit Qty.'
+if uploaded_file:
+    # Read Excel
+    df = pd.read_excel(uploaded_file, sheet_name=0, header=2, engine='openpyxl')
+    df.dropna(how='all', inplace=True)
 
-# Melt production and sales data
-production_data = df.melt(id_vars=[customer_column, product_column], value_vars=production_columns, var_name='Date', value_name='Production')
-sales_data = df.melt(id_vars=[customer_column, product_column], value_vars=sales_columns, var_name='Date', value_name='Sales')
+    # Extract relevant columns
+    date_columns = [col for col in df.columns if isinstance(col, str) and any(month in col for month in ['Oct', 'Nov', 'Dec', 'Jan', 'Feb'])]
+    production_columns = [col for col in date_columns if 'Production' in col]
+    sales_columns = [col for col in date_columns if 'Sales' in col]
+    customer_column = 'Customer'
+    product_column = 'Product'
+    deficit_column = 'Dificit Qty.'
 
-# Merge production and sales
-merged_data = pd.merge(production_data, sales_data, on=[customer_column, product_column, 'Date'], how='outer')
+    # Melt production and sales data
+    production_data = df.melt(id_vars=[customer_column, product_column], value_vars=production_columns, var_name='Date', value_name='Production')
+    sales_data = df.melt(id_vars=[customer_column, product_column], value_vars=sales_columns, var_name='Date', value_name='Sales')
 
-# Add deficit column
-if deficit_column in df.columns:
-    deficit_data = df[[customer_column, product_column, deficit_column]].dropna()
-    merged_data = pd.merge(merged_data, deficit_data, on=[customer_column, product_column], how='left')
+    # Merge production and sales
+    merged_data = pd.merge(production_data, sales_data, on=[customer_column, product_column, 'Date'], how='outer')
 
-# ✅ Extract month-year and convert to datetime
-merged_data['Date'] = merged_data['Date'].str.extract(r"(Oct|Nov|Dec|Jan|Feb)'?\\d{2}")
-merged_data.dropna(subset=['Date'], inplace=True)
+    # Add deficit column
+    if deficit_column in df.columns:
+        deficit_data = df[[customer_column, product_column, deficit_column]].dropna()
+        merged_data = pd.merge(merged_data, deficit_data, on=[customer_column, product_column], how='left')
 
-# Map month abbreviations to numbers
-month_map = {'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2}
+    # ✅ Extract month-year and convert to datetime
+    merged_data['MonthText'] = merged_data['Date'].str.extract(r"(Oct|Nov|Dec|Jan|Feb)")
+    merged_data['YearText'] = merged_data['Date'].str.extract(r"(\\d{2})")
 
-# Convert to datetime (assuming year 2025 for Oct-Dec, and 2026 for Jan-Feb)
-merged_data['Year'] = merged_data['Date'].apply(lambda x: 2025 if x in ['Oct', 'Nov', 'Dec'] else 2026)
-merged_data['Month'] = merged_data['Date'].map(month_map)
-merged_data['Date'] = pd.to_datetime(merged_data[['Year', 'Month']].assign(DAY=1))
+    # Map month abbreviations to numbers
+    month_map = {'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2}
 
-# Convert numeric columns
-merged_data['Production'] = pd.to_numeric(merged_data['Production'], errors='coerce')
-merged_data['Sales'] = pd.to_numeric(merged_data['Sales'], errors='coerce')
-merged_data['Dificit Qty.'] = pd.to_numeric(merged_data['Dificit Qty.'], errors='coerce')
+    merged_data['Month'] = merged_data['MonthText'].map(month_map)
+    merged_data['Year'] = merged_data['YearText'].astype(int) + 2000  # Convert '25' → 2025
 
-# Streamlit App
-def main():
-    st.title("📊 Rolling Plan Analytics Dashboard")
+    # Adjust year for Jan & Feb (next year)
+    merged_data.loc[merged_data['Month'].isin([1, 2]), 'Year'] = merged_data['Year'] + 1
+
+    merged_data['Date'] = pd.to_datetime(merged_data[['Year', 'Month']].assign(DAY=1))
+
+    # Convert numeric columns
+    merged_data['Production'] = pd.to_numeric(merged_data['Production'], errors='coerce')
+    merged_data['Sales'] = pd.to_numeric(merged_data['Sales'], errors='coerce')
+    merged_data['Dificit Qty.'] = pd.to_numeric(merged_data['Dificit Qty.'], errors='coerce')
 
     # Sidebar Filters
     st.sidebar.header("🔍 Filters")
@@ -74,18 +76,12 @@ def main():
     col2.metric("Total Sales", f"{total_sales:.2f}")
     col3.metric("Total Deficit", f"{total_deficit:.2f}")
 
-    # Daily Trend Chart
+    # Charts
     st.subheader("📈 Monthly Production vs Sales Trend")
-    daily_summary = merged_data.groupby('Date')[['Production', 'Sales']].sum().reset_index()
-    fig_daily = px.line(daily_summary, x='Date', y=['Production', 'Sales'], markers=True)
-    st.plotly_chart(fig_daily)
-
-    # Monthly Summary Chart
-    st.subheader("📊 Monthly Aggregated Production and Sales")
-    fig_monthly = px.bar(daily_summary, x='Date', y=['Production', 'Sales'], barmode='group')
+    monthly_summary = merged_data.groupby('Date')[['Production', 'Sales']].sum().reset_index()
+    fig_monthly = px.line(monthly_summary, x='Date', y=['Production', 'Sales'], markers=True)
     st.plotly_chart(fig_monthly)
 
-    # Customer-wise Summary
     st.subheader("👥 Customer-wise Production and Sales")
     customer_summary = filtered_data.groupby(customer_column)[['Production', 'Sales']].sum().reset_index()
     fig_customer = px.bar(customer_summary, x=customer_column, y=['Production', 'Sales'], barmode='group')
@@ -117,6 +113,5 @@ def main():
     st.subheader("📥 Download Summary as CSV")
     csv = filtered_data.to_csv(index=False).encode('utf-8')
     st.download_button("Download Filtered Data", data=csv, file_name="filtered_summary.csv", mime="text/csv")
-
-if __name__ == "__main__":
-    main()
+else:
+    st.info("Please upload an Excel file to start analysis.")
