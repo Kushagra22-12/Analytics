@@ -38,13 +38,15 @@ if uploaded_file:
 
     # Map month abbreviations to numbers
     month_map = {'Oct': 10, 'Nov': 11, 'Dec': 12, 'Jan': 1, 'Feb': 2}
-
     merged_data['Month'] = merged_data['MonthText'].map(month_map)
-    merged_data['Year'] = merged_data['YearText'].astype(int) + 2000  # Convert '25' → 2025
+
+    # ✅ Handle NaN and convert year
+    merged_data['Year'] = pd.to_numeric(merged_data['YearText'], errors='coerce').fillna(25).astype(int) + 2000
 
     # Adjust year for Jan & Feb (next year)
-    merged_data.loc[merged_data['Month'].isin([1, 2]), 'Year'] = merged_data['Year'] + 1
+    merged_data.loc[merged_data['Month'].isin([1, 2]), 'Year'] += 1
 
+    # Create proper datetime
     merged_data['Date'] = pd.to_datetime(merged_data[['Year', 'Month']].assign(DAY=1))
 
     # Convert numeric columns
